@@ -1,0 +1,38 @@
+variables:
+  DOCKER_REGISTRY: registry.gitlab.com
+  IMAGE_NAME: $CI_REGISTRY_IMAGE/whoami
+  KUBERNETES_NAMESPACE: test
+
+stages:
+  - build
+  - deploy
+
+build:
+  stage: build
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker build -t $IMAGE_NAME:$CI_COMMIT_SHA .
+    - docker push $IMAGE_NAME:$CI_COMMIT_SHA
+  only:
+    - main
+
+deploy:
+  stage: deploy
+  image: 
+    name: alpine/helm:3.11.1
+    entrypoint: [""]
+  before_script:
+    - helm plugin install https://github.com/jkroepke/helm-secrets
+    - helm repo add stable https://charts.helm.sh/stable
+    - kubectl create namespace $KUBERNETES_NAMESPACE || true
+  script:
+    - helm secrets upgrade --install application ./helm/whoami
+      --namespace $KUBERNETES_NAMESPACE
+      --set image.repository=$IMAGE_NAME
+      --set image.tag=$CI_COMMIT_SHA
+  only:
+    - main
